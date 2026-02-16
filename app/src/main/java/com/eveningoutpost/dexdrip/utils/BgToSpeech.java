@@ -11,9 +11,11 @@ import com.eveningoutpost.dexdrip.utilitymodels.PersistentStore;
 import com.eveningoutpost.dexdrip.utilitymodels.Pref;
 import com.eveningoutpost.dexdrip.utilitymodels.SpeechUtil;
 import com.eveningoutpost.dexdrip.utilitymodels.VehicleMode;
+import com.eveningoutpost.dexdrip.utils.DexCollectionType;
 import com.eveningoutpost.dexdrip.xdrip;
 
 import java.text.DecimalFormat;
+import java.util.Calendar;
 
 import static com.eveningoutpost.dexdrip.utilitymodels.SpeechUtil.TWICE_DELIMITER;
 
@@ -44,14 +46,23 @@ public class BgToSpeech implements NamedSliderProcessor {
     // speak a bg reading if its timestamp is current, include the delta name if preferences dictate
     public static void speak(final double value, long timestamp, String delta_name) {
 
-        // don't read out old values.
-        if (JoH.msSince(timestamp) > 4 * Constants.MINUTE_IN_MS) {
+        // don't read out old values - use a longer window for follower/passive sources
+        // where readings arrive with inherent network delay
+        final long maxAge = DexCollectionType.getDexCollectionType().isPassive()
+                ? 20 * Constants.MINUTE_IN_MS
+                : 4 * Constants.MINUTE_IN_MS;
+        if (JoH.msSince(timestamp) > maxAge) {
             return;
         }
 
         // TODO As we check for this in new data observer should we only check for ongoing call here?
         // check if speech is enabled and extra check for ongoing call
         if (!(Pref.getBooleanDefaultFalse(BG_TO_SPEECH_PREF) || VehicleMode.shouldSpeak()) || JoH.isOngoingCall()) {
+            return;
+        }
+
+        // If a schedule is enabled, ensure current time is within range
+        if (!isWithinSchedule()) {
             return;
         }
 
@@ -79,6 +90,59 @@ public class BgToSpeech implements NamedSliderProcessor {
         updateLastSpokenSince();
         realSpeakNow(value, timestamp, delta_name);
 
+    }
+
+    /**
+     * Check if the current time falls within the configured speak readings schedule.
+     * Returns true if no schedule is set (i.e. speak all day) or if the current time is within the scheduled range.
+     * Also used by speak alerts to respect the same schedule.
+     */
+    public static boolean isWithinSchedule() {
+        try {
+            if (Pref.getBooleanDefaultFalse("speak_readings_schedule_enabled")) {
+                long startMillis = Pref.getLong("speak_readings_schedule_start", 0);
+                long endMillis = Pref.getLong("speak_readings_schedule_end", 0);
+                if (startMillis != 0 || endMillis != 0) {
+                    Calendar now = Calendar.getInstance();
+                    int nowMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
+
+                    int startMinutes = 0; // default: midnight
+                    if (startMillis != 0) {
+                        Calendar cs = Calendar.getInstance();
+                        cs.setTimeInMillis(startMillis);
+                        startMinutes = cs.get(Calendar.HOUR_OF_DAY) * 60 + cs.get(Calendar.MINUTE);
+                    }
+
+                    int endMinutes = 24 * 60; // default: end of day
+                    if (endMillis != 0) {
+                        Calendar ce = Calendar.getInstance();
+                        ce.setTimeInMillis(endMillis);
+                        endMinutes = ce.get(Calendar.HOUR_OF_DAY) * 60 + ce.get(Calendar.MINUTE);
+                    }
+
+                    // Same start and end means all day (no restriction)
+                    if (startMinutes == endMinutes) {
+                        return true;
+                    }
+
+                    boolean inRange;
+                    if (startMinutes < endMinutes) {
+                        inRange = nowMinutes >= startMinutes && nowMinutes < endMinutes;
+                    } else {
+                        // range spans midnight
+                        inRange = nowMinutes >= startMinutes || nowMinutes < endMinutes;
+                    }
+
+                    if (!inRange) {
+                        UserError.Log.d(TAG, "Not speaking due to schedule: now " + nowMinutes + " not in " + startMinutes + "-" + endMinutes);
+                        return false;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            UserError.Log.e(TAG, "Error reading schedule preferences, falling back to speaking: " + e);
+        }
+        return true;
     }
 
     private static final String LAST_SPOKEN_TIME = "last-spoken-reading-time";

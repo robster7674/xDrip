@@ -2220,6 +2220,38 @@ public class Preferences extends BasePreferenceActivity implements SearchPrefere
             bindPreferenceSummaryAppendToIntegerValueFromLogSlider(findPreference("speak_readings_change_time"), processor, "time", false);
             bindPreferenceSummaryAppendToIntegerValueFromLogSlider(findPreference("speak_readings_change_threshold"), processor, "threshold", true);
 
+            // Hide/show schedule time pickers based on "Use schedule" checkbox state
+            // The schedule applies to both Speak Readings and Speak Alerts via isWithinSchedule()
+            try {
+                final PreferenceScreen speakScreen = (PreferenceScreen) findPreference("xdrip_speak_readings_settings");
+                final CheckBoxPreference scheduleEnabled = (CheckBoxPreference) findPreference("speak_readings_schedule_enabled");
+                final Preference scheduleStart = findPreference("speak_readings_schedule_start");
+                final Preference scheduleEnd = findPreference("speak_readings_schedule_end");
+
+                if (speakScreen != null && scheduleEnabled != null && scheduleStart != null && scheduleEnd != null) {
+                    if (!scheduleEnabled.isChecked()) {
+                        speakScreen.removePreference(scheduleStart);
+                        speakScreen.removePreference(scheduleEnd);
+                    }
+
+                    scheduleEnabled.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
+                        @Override
+                        public boolean onPreferenceChange(Preference preference, Object newValue) {
+                            boolean enabled = (Boolean) newValue;
+                            if (enabled) {
+                                speakScreen.addPreference(scheduleStart);
+                                speakScreen.addPreference(scheduleEnd);
+                            } else {
+                                speakScreen.removePreference(scheduleStart);
+                                speakScreen.removePreference(scheduleEnd);
+                            }
+                            return true;
+                        }
+                    });
+                }
+            } catch (Exception e) {
+                // ignore if preferences not found
+            }
 
             final NamedSliderProcessor tidepoolProcessor = new UploadChunk();
             bindPreferenceTitleAppendToIntegerValueFromLogSlider(findPreference("tidepool_window_latency"), tidepoolProcessor, "latency", false);
