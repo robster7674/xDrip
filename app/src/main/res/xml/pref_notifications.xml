@@ -132,6 +132,17 @@
                         android:title="@string/title_notification_channels_grouping" />
                 </PreferenceScreen>
 
+                <CheckBoxPreference
+                    android:defaultValue="false"
+                    android:key="alert_respect_phone_volume"
+                    android:summary="@string/summary_alert_respect_phone_volume"
+                    android:title="@string/title_alert_respect_phone_volume" />
+                <CheckBoxPreference
+                    android:defaultValue="false"
+                    android:key="alert_gentle_ascending"
+                    android:summary="@string/summary_alert_gentle_ascending"
+                    android:title="@string/title_alert_gentle_ascending" />
+
                 <PreferenceScreen
                     android:key="ascending_volume_settings"
                     android:title="@string/title_ascending_volume">

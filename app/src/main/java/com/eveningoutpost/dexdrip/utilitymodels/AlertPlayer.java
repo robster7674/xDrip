@@ -210,6 +210,7 @@ public class AlertPlayer {
         if (cancelNotification) {
             notificationDismiss(ctx);
         }
+        stopGentleAscending();
         if (mediaPlayer != null) {
             stopAndReleasePlayer(mediaPlayer);
             mediaPlayer = null;
@@ -329,6 +330,49 @@ public class AlertPlayer {
     }
 
 
+    private static final long GENTLE_ASCENDING_DURATION_MS = 60 * 1000;
+    private static final long GENTLE_ASCENDING_STEP_MS = 2000;
+    private static final float GENTLE_ASCENDING_START_FRAC = 0.05f;
+    private volatile Handler gentleAscendingHandler;
+
+    private void stopGentleAscending() {
+        if (gentleAscendingHandler != null) {
+            gentleAscendingHandler.removeCallbacksAndMessages(null);
+            gentleAscendingHandler = null;
+        }
+    }
+
+    private void startGentleAscending(final MediaPlayer mp) {
+        stopGentleAscending();
+        gentleAscendingHandler = new Handler(Looper.getMainLooper());
+        final long startTime = JoH.tsl();
+
+        mp.setVolume(GENTLE_ASCENDING_START_FRAC, GENTLE_ASCENDING_START_FRAC);
+        Log.d(TAG, "Gentle ascending: starting at volume " + GENTLE_ASCENDING_START_FRAC);
+
+        final Runnable rampUp = new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    if (mp == null || !mp.isPlaying()) {
+                        return;
+                    }
+                    float elapsed = JoH.tsl() - startTime;
+                    float progress = Math.min(elapsed / GENTLE_ASCENDING_DURATION_MS, 1.0f);
+                    float vol = GENTLE_ASCENDING_START_FRAC + (1.0f - GENTLE_ASCENDING_START_FRAC) * progress;
+                    mp.setVolume(vol, vol);
+                    Log.d(TAG, "Gentle ascending: volume " + String.format("%.2f", vol) + " (progress " + String.format("%.0f%%", progress * 100) + ")");
+                    if (progress < 1.0f && gentleAscendingHandler != null) {
+                        gentleAscendingHandler.postDelayed(this, GENTLE_ASCENDING_STEP_MS);
+                    }
+                } catch (IllegalStateException e) {
+                    Log.d(TAG, "Gentle ascending: MediaPlayer no longer valid");
+                }
+            }
+        };
+        gentleAscendingHandler.postDelayed(rampUp, GENTLE_ASCENDING_STEP_MS);
+    }
+
     protected synchronized void playFile(final Context ctx, final String fileName, final float volumeFrac, final boolean forceSpeaker, final boolean overrideSilentMode) {
         Log.i(TAG, "playFile: called fileName = " + fileName);
         if (volumeFrac <= 0) {
@@ -340,6 +384,7 @@ public class AlertPlayer {
             Log.i(TAG, "ERROR, playFile sound already playing");
             stopAndReleasePlayer(mediaPlayer);
         }
+        stopGentleAscending();
 
         mediaPlayer = new MediaPlayerCreaterHelper().createMediaPlayer(ctx);
         if (mediaPlayer == null) {
@@ -353,6 +398,7 @@ public class AlertPlayer {
 
         mediaPlayer.setOnCompletionListener(mp -> {
             Log.i(TAG, "playFile: onCompletion called (finished playing) ");
+            stopGentleAscending();
             delayedMediaPlayerRelease(mp);
             JoH.threadSleep(300);
             revertCurrentVolume(streamType);
@@ -361,6 +407,7 @@ public class AlertPlayer {
 
         mediaPlayer.setOnErrorListener((mp, what, extra) -> {
             Log.e(TAG, "playFile: onError called (what: " + what + ", extra: " + extra);
+            stopGentleAscending();
             // possibly media player error; release is handled in onCompletionListener
             return false;
         });
@@ -378,6 +425,7 @@ public class AlertPlayer {
         }
 
         streamType = forceSpeaker ? AudioManager.STREAM_ALARM : AudioManager.STREAM_MUSIC;
+        final boolean useGentleAscending = Pref.getBooleanDefaultFalse("alert_gentle_ascending");
 
         try {
             requestAudioFocus();
@@ -385,6 +433,9 @@ public class AlertPlayer {
             mediaPlayer.setLooping(false);
             mediaPlayer.setOnPreparedListener(mp -> {
                 adjustCurrentVolumeForAlert(streamType, volumeFrac, overrideSilentMode);
+                if (useGentleAscending) {
+                    startGentleAscending(mediaPlayer);
+                }
                 mediaPlayer.start();
             });
 
@@ -404,6 +455,15 @@ public class AlertPlayer {
         }
         volumeBeforeAlert = getVolume(streamType);
         volumeForThisAlert = (int) (maxVolume * volumeFrac);
+
+        // Cap at the phone's current volume when "respect phone volume" is enabled
+        if (Pref.getBooleanDefaultFalse("alert_respect_phone_volume") && volumeBeforeAlert > 0) {
+            if (volumeForThisAlert > volumeBeforeAlert) {
+                Log.d(TAG, "Respecting phone volume: capping from " + volumeForThisAlert + " to " + volumeBeforeAlert);
+                volumeForThisAlert = volumeBeforeAlert;
+            }
+        }
+
         Log.d(TAG, "before playing volumeBeforeAlert " + volumeBeforeAlert + " volumeForThisAlert " + volumeForThisAlert);
         // adjust volume if we are allowed and it needs adjusting
         if (volumeForThisAlert != 0

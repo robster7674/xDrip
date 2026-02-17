@@ -1558,6 +1558,10 @@
     <string name="summary_ascending_volume_to_medium">When enabled, ascending volume profile will ascend to medium volume instead of maximum</string>
     <string name="title_ascending_volume_to_medium">Ascend to medium</string>
     <string name="summary_play_sound_for_initial_calibration">Play sound when Initial Calibration is requested</string>
+    <string name="title_alert_respect_phone_volume">Respect phone volume</string>
+    <string name="summary_alert_respect_phone_volume">Alert volume will never exceed the phone\'s current volume setting</string>
+    <string name="title_alert_gentle_ascending">Gentle ascending</string>
+    <string name="summary_alert_gentle_ascending">Gradually increase alert volume from near-silent to target over 60 seconds within each alert playback</string>
     <string name="title_play_sound_for_initial_calibration">Initial Alert</string>
     <string name="category_noisy_readings">Noisy Readings</string>
     <string name="category_falling_rising_bg">Falling/Rising BG</string>
