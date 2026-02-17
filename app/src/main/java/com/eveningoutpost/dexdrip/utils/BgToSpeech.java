@@ -45,6 +45,7 @@ public class BgToSpeech implements NamedSliderProcessor {
 
     // speak a bg reading if its timestamp is current, include the delta name if preferences dictate
     public static void speak(final double value, long timestamp, String delta_name) {
+        UserError.Log.d(TAG, "speak() called: value=" + value + " age=" + JoH.msSince(timestamp) + "ms");
 
         // don't read out old values - use a longer window for follower/passive sources
         // where readings arrive with inherent network delay
@@ -52,17 +53,20 @@ public class BgToSpeech implements NamedSliderProcessor {
                 ? 20 * Constants.MINUTE_IN_MS
                 : 4 * Constants.MINUTE_IN_MS;
         if (JoH.msSince(timestamp) > maxAge) {
+            UserError.Log.d(TAG, "Not speaking: reading too old (" + JoH.msSince(timestamp) + "ms > " + maxAge + "ms)");
             return;
         }
 
         // TODO As we check for this in new data observer should we only check for ongoing call here?
         // check if speech is enabled and extra check for ongoing call
         if (!(Pref.getBooleanDefaultFalse(BG_TO_SPEECH_PREF) || VehicleMode.shouldSpeak()) || JoH.isOngoingCall()) {
+            UserError.Log.d(TAG, "Not speaking: speech disabled or ongoing call");
             return;
         }
 
         // If a schedule is enabled, ensure current time is within range
         if (!isWithinSchedule()) {
+            UserError.Log.d(TAG, "Not speaking: outside schedule");
             return;
         }
 
@@ -100,49 +104,74 @@ public class BgToSpeech implements NamedSliderProcessor {
     public static boolean isWithinSchedule() {
         try {
             if (Pref.getBooleanDefaultFalse("speak_readings_schedule_enabled")) {
-                long startMillis = Pref.getLong("speak_readings_schedule_start", 0);
-                long endMillis = Pref.getLong("speak_readings_schedule_end", 0);
-                if (startMillis != 0 || endMillis != 0) {
-                    Calendar now = Calendar.getInstance();
-                    int nowMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
+                long startMillis = getScheduleTimeSafe("speak_readings_schedule_start");
+                long endMillis = getScheduleTimeSafe("speak_readings_schedule_end");
+                UserError.Log.d(TAG, "Schedule enabled: startMillis=" + startMillis + " endMillis=" + endMillis);
 
-                    int startMinutes = 0; // default: midnight
-                    if (startMillis != 0) {
-                        Calendar cs = Calendar.getInstance();
-                        cs.setTimeInMillis(startMillis);
-                        startMinutes = cs.get(Calendar.HOUR_OF_DAY) * 60 + cs.get(Calendar.MINUTE);
-                    }
+                Calendar now = Calendar.getInstance();
+                int nowMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
 
-                    int endMinutes = 24 * 60; // default: end of day
-                    if (endMillis != 0) {
-                        Calendar ce = Calendar.getInstance();
-                        ce.setTimeInMillis(endMillis);
-                        endMinutes = ce.get(Calendar.HOUR_OF_DAY) * 60 + ce.get(Calendar.MINUTE);
-                    }
+                int startMinutes = 0; // default: midnight
+                if (startMillis != 0) {
+                    Calendar cs = Calendar.getInstance();
+                    cs.setTimeInMillis(startMillis);
+                    startMinutes = cs.get(Calendar.HOUR_OF_DAY) * 60 + cs.get(Calendar.MINUTE);
+                }
 
-                    // Same start and end means all day (no restriction)
-                    if (startMinutes == endMinutes) {
-                        return true;
-                    }
+                int endMinutes = 24 * 60; // default: end of day
+                if (endMillis != 0) {
+                    Calendar ce = Calendar.getInstance();
+                    ce.setTimeInMillis(endMillis);
+                    endMinutes = ce.get(Calendar.HOUR_OF_DAY) * 60 + ce.get(Calendar.MINUTE);
+                }
 
-                    boolean inRange;
-                    if (startMinutes < endMinutes) {
-                        inRange = nowMinutes >= startMinutes && nowMinutes < endMinutes;
-                    } else {
-                        // range spans midnight
-                        inRange = nowMinutes >= startMinutes || nowMinutes < endMinutes;
-                    }
+                UserError.Log.d(TAG, "Schedule check: now=" + nowMinutes
+                        + " (" + now.get(Calendar.HOUR_OF_DAY) + ":" + String.format("%02d", now.get(Calendar.MINUTE)) + ")"
+                        + " start=" + startMinutes + " end=" + endMinutes);
 
-                    if (!inRange) {
-                        UserError.Log.d(TAG, "Not speaking due to schedule: now " + nowMinutes + " not in " + startMinutes + "-" + endMinutes);
-                        return false;
-                    }
+                // Same start and end means all day (no restriction)
+                if (startMinutes == endMinutes) {
+                    UserError.Log.d(TAG, "Schedule: start==end, treating as all day");
+                    return true;
+                }
+
+                boolean inRange;
+                if (startMinutes < endMinutes) {
+                    inRange = nowMinutes >= startMinutes && nowMinutes < endMinutes;
+                } else {
+                    // range spans midnight
+                    inRange = nowMinutes >= startMinutes || nowMinutes < endMinutes;
+                }
+
+                UserError.Log.d(TAG, "Schedule result: inRange=" + inRange);
+
+                if (!inRange) {
+                    return false;
                 }
             }
         } catch (Exception e) {
             UserError.Log.e(TAG, "Error reading schedule preferences, falling back to speaking: " + e);
         }
         return true;
+    }
+
+    /**
+     * Safely read a schedule time preference, handling potential ClassCastException
+     * that can occur on some devices if the value was stored as a different type.
+     */
+    private static long getScheduleTimeSafe(String key) {
+        try {
+            return Pref.getLong(key, 0);
+        } catch (ClassCastException e) {
+            UserError.Log.e(TAG, "ClassCastException reading " + key + ", trying as string: " + e);
+            try {
+                String val = Pref.getString(key, "0");
+                return Long.parseLong(val);
+            } catch (Exception e2) {
+                UserError.Log.e(TAG, "Failed to read " + key + " as string too: " + e2);
+                return 0;
+            }
+        }
     }
 
     private static final String LAST_SPOKEN_TIME = "last-spoken-reading-time";

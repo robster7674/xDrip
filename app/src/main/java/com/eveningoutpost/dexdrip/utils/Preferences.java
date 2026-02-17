@@ -888,6 +888,17 @@ public class Preferences extends BasePreferenceActivity implements SearchPrefere
     }*/
 
 
+    private static void updateScheduleEndSummary(Preference scheduleEnd) {
+        try {
+            long endMillis = Pref.getLong("speak_readings_schedule_end", 0);
+            if (endMillis == 0) {
+                scheduleEnd.setSummary("Not set \u2013 readings spoken until end of day");
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+    }
+
     private static void bindPreferenceSummaryToValue(Preference preference) {
         try {
             preference.setOnPreferenceChangeListener(sBindPreferenceSummaryToValueListener);
@@ -2229,6 +2240,9 @@ public class Preferences extends BasePreferenceActivity implements SearchPrefere
                 final Preference scheduleEnd = findPreference("speak_readings_schedule_end");
 
                 if (speakScreen != null && scheduleEnabled != null && scheduleStart != null && scheduleEnd != null) {
+                    // Show helpful summary for end time when no value is stored
+                    updateScheduleEndSummary(scheduleEnd);
+
                     if (!scheduleEnabled.isChecked()) {
                         speakScreen.removePreference(scheduleStart);
                         speakScreen.removePreference(scheduleEnd);
@@ -2241,10 +2255,20 @@ public class Preferences extends BasePreferenceActivity implements SearchPrefere
                             if (enabled) {
                                 speakScreen.addPreference(scheduleStart);
                                 speakScreen.addPreference(scheduleEnd);
+                                updateScheduleEndSummary(scheduleEnd);
                             } else {
                                 speakScreen.removePreference(scheduleStart);
                                 speakScreen.removePreference(scheduleEnd);
                             }
+                            return true;
+                        }
+                    });
+
+                    // Update end time summary when the user changes it
+                    scheduleEnd.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
+                        @Override
+                        public boolean onPreferenceChange(Preference preference, Object newValue) {
+                            // After a value is set, the TimePreference updates its own summary
                             return true;
                         }
                     });
