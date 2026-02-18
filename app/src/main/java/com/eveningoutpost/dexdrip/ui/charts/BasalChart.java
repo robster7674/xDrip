@@ -114,7 +114,7 @@ public class BasalChart {
         xAxis.setTiltAngle(-90f);
         xAxis.setMaxLabelChars(7);
 
-        SimpleDateFormat sdf = new SimpleDateFormat(DateFormat.is24HourFormat(xdrip.getAppContext()) ? "HH:mm" : "a h:mm", Locale.ENGLISH);
+        SimpleDateFormat sdf = new SimpleDateFormat(JoH.is24HourFormat() ? "HH:mm" : "a h:mm", Locale.ENGLISH);
         sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
 
         DateFormatSymbols symbols = new DateFormatSymbols(Locale.getDefault());

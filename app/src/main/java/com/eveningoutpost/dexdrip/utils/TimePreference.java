@@ -3,10 +3,11 @@ package com.eveningoutpost.dexdrip.utils;
 import android.content.Context;
 import android.content.res.TypedArray;
 import android.preference.DialogPreference;
-import android.text.format.DateFormat;
 import android.util.AttributeSet;
 import android.view.View;
 import android.widget.TimePicker;
+
+import com.eveningoutpost.dexdrip.models.JoH;
 
 import java.util.Calendar;
 import java.util.Date;
@@ -35,6 +36,7 @@ public class TimePreference extends DialogPreference {
     @Override
     protected View onCreateDialogView() {
         picker = new TimePicker(getContext());
+        picker.setIs24HourView(JoH.is24HourFormat());
         return (picker);
     }
 
@@ -90,6 +92,6 @@ public class TimePreference extends DialogPreference {
         if (calendar == null) {
             return null;
         }
-        return DateFormat.getTimeFormat(getContext()).format(new Date(calendar.getTimeInMillis()));
+        return JoH.getTimeFormat().format(new Date(calendar.getTimeInMillis()));
     }
 }

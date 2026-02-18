@@ -1160,6 +1160,7 @@ public class Preferences extends BasePreferenceActivity implements SearchPrefere
             addPreferencesFromResource(R.xml.pref_advanced_settings);
             addPreferencesFromResource(R.xml.xdrip_plus_prefs);
 
+            bindPreferenceSummaryToValue(findPreference("time_format_pref"));
             bindPreferenceSummaryToValue(findPreference("persistent_high_threshold_mins"));
             bindPreferenceSummaryToValue(findPreference("persistent_high_repeat_mins"));
 

@@ -280,7 +280,7 @@ public class AlertList extends ActivityWithMenu {
     public String timeFormatString(int hour, int minute) {
         SimpleDateFormat timeFormat24 = new SimpleDateFormat("HH:mm");
         String selected = hour + ":" + ((minute < 10) ? "0" : "") + minute;
-        if (!android.text.format.DateFormat.is24HourFormat(mContext)) {
+        if (!JoH.is24HourFormat()) {
             try {
                 Date date = timeFormat24.parse(selected);
                 SimpleDateFormat timeFormat12 = new SimpleDateFormat("hh:mm aa");

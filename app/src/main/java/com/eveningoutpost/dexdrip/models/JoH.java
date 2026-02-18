@@ -760,19 +760,32 @@ public class JoH {
      return gson_instance;
     }
 
+    public static boolean is24HourFormat() {
+        final String pref = Pref.getString("time_format_pref", "system");
+        if ("12".equals(pref)) return false;
+        if ("24".equals(pref)) return true;
+        return android.text.format.DateFormat.is24HourFormat(xdrip.getAppContext());
+    }
+
+    @SuppressLint("SimpleDateFormat")
+    public static java.text.DateFormat getTimeFormat() {
+        return new SimpleDateFormat(is24HourFormat() ? "HH:mm" : "h:mm a");
+    }
+
     public static String hourMinuteString() {
-        // Date date = new Date();
-        // SimpleDateFormat sd = new SimpleDateFormat("HH:mm");
-        //  return sd.format(date);
         return hourMinuteString(JoH.tsl());
     }
 
     public static String hourMinuteString(long timestamp) {
-        return android.text.format.DateFormat.format("kk:mm", timestamp).toString();
+        return is24HourFormat()
+                ? android.text.format.DateFormat.format("kk:mm", timestamp).toString()
+                : android.text.format.DateFormat.format("h:mm a", timestamp).toString();
     }
 
     public static String dateTimeText(long timestamp) {
-        return android.text.format.DateFormat.format("yyyy-MM-dd kk:mm:ss", timestamp).toString();
+        return is24HourFormat()
+                ? android.text.format.DateFormat.format("yyyy-MM-dd kk:mm:ss", timestamp).toString()
+                : android.text.format.DateFormat.format("yyyy-MM-dd h:mm:ss a", timestamp).toString();
     }
 
     public static String dateText(long timestamp) {

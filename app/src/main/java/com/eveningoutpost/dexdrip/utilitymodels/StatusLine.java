@@ -182,8 +182,7 @@ public class StatusLine {
         }
 
         if (Pref.getBoolean("status_line_time", false)) {
-            SimpleDateFormat sdf = new SimpleDateFormat("HH:mm");
-            append(sb, sdf.format(new Date()));
+            append(sb, JoH.getTimeFormat().format(new Date()));
         }
         return sb.toString();
 

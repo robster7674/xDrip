@@ -2089,4 +2089,9 @@
     <string name="glupro_reading_frequency">Reading frequency</string>
     <string name="need_bluetooth_permission">Need bluetooth permission</string>
     <string name="ob1_sensor_stopped">Sensor Stopped</string>
+    <string name="title_time_format">Time format</string>
+    <string name="summary_time_format">Choose 12-hour or 24-hour time display</string>
+    <string name="time_format_system">System default</string>
+    <string name="time_format_12h">12-hour (AM/PM)</string>
+    <string name="time_format_24h">24-hour</string>
 </resources>

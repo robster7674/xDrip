@@ -562,4 +562,16 @@
         <item>5</item>
     </string-array>
 
+    <string-array name="TimeFormatEntries">
+        <item>@string/time_format_system</item>
+        <item>@string/time_format_12h</item>
+        <item>@string/time_format_24h</item>
+    </string-array>
+
+    <string-array name="TimeFormatValues">
+        <item>system</item>
+        <item>12</item>
+        <item>24</item>
+    </string-array>
+
 </resources>

@@ -1,5 +1,7 @@
 package com.eveningoutpost.dexdrip.utils;
 
+import android.os.PowerManager;
+
 import com.eveningoutpost.dexdrip.BestGlucose;
 import com.eveningoutpost.dexdrip.models.BgReading;
 import com.eveningoutpost.dexdrip.models.JoH;
@@ -66,7 +68,12 @@ public class BgToSpeech implements NamedSliderProcessor {
 
         // If a schedule is enabled, ensure current time is within range
         if (!isWithinSchedule()) {
-            UserError.Log.d(TAG, "Not speaking: outside schedule");
+            final long msUntilStart = getMillisUntilScheduleStart();
+            if (msUntilStart > 0 && msUntilStart <= 6 * Constants.MINUTE_IN_MS) {
+                scheduleSpeakAtStart(msUntilStart, value, timestamp, delta_name);
+            }
+            UserError.Log.d(TAG, "Not speaking: outside schedule"
+                    + (msUntilStart > 0 ? " (starts in " + JoH.niceTimeScalar(msUntilStart) + ")" : ""));
             return;
         }
 
@@ -171,6 +178,70 @@ public class BgToSpeech implements NamedSliderProcessor {
                 UserError.Log.e(TAG, "Failed to read " + key + " as string too: " + e2);
                 return 0;
             }
+        }
+    }
+
+    private static volatile long pendingSpeakAt = 0;
+
+    /**
+     * Defer a reading for speech until the schedule start time.
+     * Holds a wake lock for the duration so the device stays awake.
+     */
+    private static void scheduleSpeakAtStart(final long delayMs, final double value, final long timestamp, final String delta_name) {
+        final long targetTime = JoH.tsl() + delayMs;
+        if (Math.abs(pendingSpeakAt - targetTime) < Constants.MINUTE_IN_MS) {
+            UserError.Log.d(TAG, "Speak at schedule start already pending, skipping duplicate");
+            return;
+        }
+        pendingSpeakAt = targetTime;
+        UserError.Log.d(TAG, "Deferring reading for speech at schedule start in " + JoH.niceTimeScalar(delayMs));
+
+        new Thread(() -> {
+            final PowerManager.WakeLock wl = JoH.getWakeLock("BgToSpeech-schedule-start",
+                    (int) (delayMs + 30 * Constants.SECOND_IN_MS));
+            try {
+                Thread.sleep(delayMs);
+                if (isWithinSchedule()) {
+                    UserError.Log.d(TAG, "Schedule started, speaking deferred reading");
+                    updateLastSpokenSince();
+                    realSpeakNow(value, timestamp, delta_name);
+                } else {
+                    UserError.Log.d(TAG, "Schedule still not active after delay, skipping");
+                }
+            } catch (InterruptedException e) {
+                UserError.Log.d(TAG, "Deferred speak interrupted");
+            } finally {
+                JoH.releaseWakeLock(wl);
+                pendingSpeakAt = 0;
+            }
+        }).start();
+    }
+
+    /**
+     * Calculate milliseconds until the next occurrence of the schedule start time.
+     * Returns -1 if no schedule is configured or no start time is set.
+     */
+    private static long getMillisUntilScheduleStart() {
+        try {
+            if (!Pref.getBooleanDefaultFalse("speak_readings_schedule_enabled")) {
+                return -1;
+            }
+            final long startMillis = getScheduleTimeSafe("speak_readings_schedule_start");
+            if (startMillis == 0) return -1;
+
+            final Calendar cs = Calendar.getInstance();
+            cs.setTimeInMillis(startMillis);
+            final int startMinutes = cs.get(Calendar.HOUR_OF_DAY) * 60 + cs.get(Calendar.MINUTE);
+
+            final Calendar now = Calendar.getInstance();
+            final int nowMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
+
+            int diff = startMinutes - nowMinutes;
+            if (diff <= 0) diff += 24 * 60;
+
+            return diff * 60 * 1000L;
+        } catch (Exception e) {
+            return -1;
         }
     }
 

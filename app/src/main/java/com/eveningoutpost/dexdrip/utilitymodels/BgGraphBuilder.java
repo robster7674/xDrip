@@ -2258,7 +2258,7 @@ public class BgGraphBuilder {
     }
 
     private SimpleDateFormat hourFormat() {
-        return new SimpleDateFormat(DateFormat.is24HourFormat(context) ? "HH" : "h a");
+        return new SimpleDateFormat(JoH.is24HourFormat() ? "HH" : "h a");
     }
 
     public double unitized(double value) {
@@ -2469,7 +2469,7 @@ public class BgGraphBuilder {
                 }
             }
 
-            final java.text.DateFormat timeFormat = DateFormat.getTimeFormat(context);
+            final java.text.DateFormat timeFormat = JoH.getTimeFormat();
             //Won't give the exact time of the reading but the time on the grid: close enough.
             final Long time = (real_timestamp > 0) ? real_timestamp : ((long) pointValue.getX()) * FUZZER; // TODO last clause should never be used now
             final double ypos = pointValue.getY();

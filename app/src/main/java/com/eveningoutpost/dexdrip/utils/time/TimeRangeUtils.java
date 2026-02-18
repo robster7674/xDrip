@@ -54,7 +54,7 @@ public class TimeRangeUtils {
     }
 
     public static String niceTimeOfDay(final int ssm) {
-        @SuppressLint("SimpleDateFormat") final SimpleDateFormat sdf = new SimpleDateFormat(DateFormat.is24HourFormat(xdrip.getAppContext()) ? "HH:mm" : "h:mm a");
+        @SuppressLint("SimpleDateFormat") final SimpleDateFormat sdf = new SimpleDateFormat(JoH.is24HourFormat() ? "HH:mm" : "h:mm a");
         final Calendar calendar = Calendar.getInstance();
         calendar.setTimeInMillis(JoH.tsl());
         calendar.set(Calendar.HOUR_OF_DAY, ssm / 3600);

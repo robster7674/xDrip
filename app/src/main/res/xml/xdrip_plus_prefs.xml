@@ -367,6 +367,14 @@
                     android:title="@string/title_enlarge_fonts_on_large_screens" />
             </PreferenceScreen>
 
+            <ListPreference
+                android:defaultValue="system"
+                android:entries="@array/TimeFormatEntries"
+                android:entryValues="@array/TimeFormatValues"
+                android:key="time_format_pref"
+                android:summary="@string/summary_time_format"
+                android:title="@string/title_time_format" />
+
             <SwitchPreference
                 android:defaultValue="false"
                 android:key="force_english"
