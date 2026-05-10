@@ -52,6 +52,7 @@ public class BgToSpeech implements NamedSliderProcessor {
     }
 
     private static int getThresholdSliderValue(int position) {
+        if (position == 0) return 0; // 0 = threshold disabled (OFF)
         return (int) LogSlider.calc(0, 300, 4, MAX_THRESHOLD_MGDL, position);
     }
 
@@ -293,6 +294,10 @@ public class BgToSpeech implements NamedSliderProcessor {
 
     private static boolean thresholdExceeded(double value) {
         final long change_delta = getThresholdSliderValue(Pref.getInt("speak_readings_change_threshold", 0));
+        if (change_delta == 0) {
+            UserError.Log.d(TAG, "Threshold disabled (OFF)");
+            return false;
+        }
         final double abs_delta = Math.abs(value - PersistentStore.getDouble(LAST_SPOKEN_VALUE));
         if (abs_delta > change_delta) {
             UserError.Log.uel(TAG, "Threshold EXCEEDED: delta=" + displayBg(abs_delta) + " vs " + displayBg(change_delta) + " @ " + displayBg(value));
