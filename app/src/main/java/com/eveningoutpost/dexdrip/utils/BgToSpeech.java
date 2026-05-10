@@ -93,7 +93,9 @@ public class BgToSpeech implements NamedSliderProcessor {
         boolean conditions_met = false;
 
         if (lastSpokenSince() < change_time) {
+            final long remaining = change_time - lastSpokenSince();
             UserError.Log.d(TAG, "Not speaking due to change time threshold: " + JoH.niceTimeScalar(change_time) + " vs " + JoH.niceTimeScalar(lastSpokenSince()));
+            scheduleSpeakAtInterval(remaining, value, timestamp, delta_name);
 
         } else {
             UserError.Log.d(TAG, "Speaking due to change time threshold: " + JoH.niceTimeScalar(change_time) + " vs " + JoH.niceTimeScalar(lastSpokenSince()));
@@ -178,6 +180,7 @@ public class BgToSpeech implements NamedSliderProcessor {
     }
 
     private static volatile long pendingSpeakAt = 0;
+    private static volatile long pendingIntervalSpeakAt = 0;
 
     /**
      * Defer a reading for speech until the schedule start time.
@@ -209,6 +212,48 @@ public class BgToSpeech implements NamedSliderProcessor {
             } finally {
                 JoH.releaseWakeLock(wl);
                 pendingSpeakAt = 0;
+            }
+        }).start();
+    }
+
+    /**
+     * Defer a reading for speech until the interval timer expires.
+     * If a natural speak fires before the timer, the deferred speak self-cancels
+     * because lastSpokenSince() will have reset to near zero (less than the age
+     * recorded at schedule time).
+     */
+    private static void scheduleSpeakAtInterval(final long delayMs, final double value, final long timestamp, final String delta_name) {
+        final long targetTime = JoH.tsl() + delayMs;
+        if (Math.abs(pendingIntervalSpeakAt - targetTime) < 30 * Constants.SECOND_IN_MS) {
+            UserError.Log.d(TAG, "Interval deferred speak already pending, skipping duplicate");
+            return;
+        }
+        pendingIntervalSpeakAt = targetTime;
+        final long spokenAgeAtSchedule = lastSpokenSince();
+        UserError.Log.d(TAG, "Deferring reading for interval speak in " + JoH.niceTimeScalar(delayMs));
+
+        new Thread(() -> {
+            final PowerManager.WakeLock wl = JoH.getWakeLock("BgToSpeech-interval",
+                    (int) (delayMs + 30 * Constants.SECOND_IN_MS));
+            try {
+                Thread.sleep(delayMs);
+                if (lastSpokenSince() < spokenAgeAtSchedule) {
+                    UserError.Log.d(TAG, "Interval deferred speak cancelled: natural speak fired");
+                    return;
+                }
+                if (!isWithinSchedule()) {
+                    UserError.Log.d(TAG, "Interval deferred speak cancelled: outside schedule");
+                    return;
+                }
+                UserError.Log.d(TAG, "Interval elapsed, speaking deferred reading");
+                updateLastSpokenSince();
+                PersistentStore.setDouble(LAST_SPOKEN_VALUE, value);
+                realSpeakNow(value, timestamp, delta_name);
+            } catch (InterruptedException e) {
+                UserError.Log.d(TAG, "Interval deferred speak interrupted");
+            } finally {
+                JoH.releaseWakeLock(wl);
+                pendingIntervalSpeakAt = 0;
             }
         }).start();
     }
