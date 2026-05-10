@@ -36,6 +36,10 @@ public class SpeechUtil {
     private static volatile TextToSpeech tts = null; // maintained instance
     private static volatile AudioManager.OnAudioFocusChangeListener audioFocusListener = null;
 
+    static {
+        UserError.ExtraLogTags.ensureDebugTag(TAG);
+    }
+
     // delay parameter allows you to force a millis delay before playing to avoid clash with notification sounds triggered at the same time
     @SuppressWarnings("WeakerAccess")
     public static void say(final String text) {

@@ -40,6 +40,13 @@ public class BgToSpeech implements NamedSliderProcessor {
         UserError.ExtraLogTags.ensureDebugTag(TAG);
     }
 
+    private static String displayBg(final double mgdl) {
+        if (Pref.getString("units", "mgdl").equals("mgdl")) {
+            return String.valueOf((int) mgdl);
+        }
+        return new DecimalFormat("#.#").format(mgdl * Constants.MGDL_TO_MMOLL);
+    }
+
     private static int getMinutesSliderValue(int position) {
         return (int) LogSlider.calc(0, 300, 4, MAX_THRESHOLD_MINUTES, position);
     }
@@ -50,7 +57,7 @@ public class BgToSpeech implements NamedSliderProcessor {
 
     // speak a bg reading if its timestamp is current, include the delta name if preferences dictate
     public static void speak(final double value, long timestamp, String delta_name) {
-        UserError.Log.d(TAG, "speak() called: value=" + value + " age=" + JoH.msSince(timestamp) + "ms");
+        UserError.Log.d(TAG, "speak() called: value=" + displayBg(value) + " age=" + JoH.msSince(timestamp) + "ms");
 
         // don't read out old values - use a longer window for follower/passive sources
         // where readings arrive with inherent network delay
@@ -95,13 +102,13 @@ public class BgToSpeech implements NamedSliderProcessor {
 
         if (!conditions_met) {
             if (!thresholdExceeded(value)) {
-                UserError.Log.d(TAG, "Not speaking due to change delta threshold: " + value);
+                UserError.Log.d(TAG, "Not speaking due to change delta threshold: " + displayBg(value));
                 return;
             }
         }
 
-
         updateLastSpokenSince();
+        PersistentStore.setDouble(LAST_SPOKEN_VALUE, value);
         realSpeakNow(value, timestamp, delta_name);
 
     }
@@ -243,11 +250,10 @@ public class BgToSpeech implements NamedSliderProcessor {
         final long change_delta = getThresholdSliderValue(Pref.getInt("speak_readings_change_threshold", 0));
         final double abs_delta = Math.abs(value - PersistentStore.getDouble(LAST_SPOKEN_VALUE));
         if (abs_delta > change_delta) {
-            UserError.Log.uel(TAG, "Threshold EXCEEDED: Current change delta: " + abs_delta + " vs " + change_delta + " @ " + value);
-            PersistentStore.setDouble(LAST_SPOKEN_VALUE, value);
+            UserError.Log.uel(TAG, "Threshold EXCEEDED: delta=" + displayBg(abs_delta) + " vs " + displayBg(change_delta) + " @ " + displayBg(value));
             return true;
         }
-        UserError.Log.d(TAG, "Threshold not exceeded: Current change delta: " + abs_delta + " vs " + change_delta + " @ " + value);
+        UserError.Log.d(TAG, "Threshold not exceeded: delta=" + displayBg(abs_delta) + " vs " + displayBg(change_delta) + " @ " + displayBg(value));
         return false;
     }
 
