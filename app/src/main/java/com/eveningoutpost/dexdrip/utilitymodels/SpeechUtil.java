@@ -4,13 +4,16 @@ import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.media.AudioManager;
+import android.os.Build;
 import android.os.PowerManager;
 import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 
 import com.eveningoutpost.dexdrip.models.JoH;
 import com.eveningoutpost.dexdrip.models.UserError;
 import com.eveningoutpost.dexdrip.xdrip;
 
+import java.util.HashMap;
 import java.util.Locale;
 
 /**
@@ -31,6 +34,7 @@ public class SpeechUtil {
     public static final String TAG = "SpeechUtil";
     public static final String TWICE_DELIMITER = " ... "; // creates a pause hopefully works on all locales
     private static volatile TextToSpeech tts = null; // maintained instance
+    private static volatile AudioManager.OnAudioFocusChangeListener audioFocusListener = null;
 
     // delay parameter allows you to force a millis delay before playing to avoid clash with notification sounds triggered at the same time
     @SuppressWarnings("WeakerAccess")
@@ -88,9 +92,17 @@ public class SpeechUtil {
                 final boolean double_up_text_flag = (!text.contains(TWICE_DELIMITER)) && Pref.getBooleanDefaultFalse("speak_twice");
                 final String final_text_to_speak = double_up_text_flag ? (text + TWICE_DELIMITER + text) : text;
 
+                requestAudioFocus();
                 int result;
                 try {
-                    result = tts.speak(final_text_to_speak, TextToSpeech.QUEUE_ADD, null);
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        result = tts.speak(final_text_to_speak, TextToSpeech.QUEUE_ADD, null, TAG + "_" + retry);
+                    } else {
+                        final HashMap<String, String> params = new HashMap<>();
+                        params.put(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, TAG + "_" + retry);
+                        //noinspection deprecation
+                        result = tts.speak(final_text_to_speak, TextToSpeech.QUEUE_ADD, params);
+                    }
                 } catch (NullPointerException e) {
                     result = TextToSpeech.ERROR;
                     UserError.Log.e(TAG, "Got null pointer trying to speak! concurrency issue");
@@ -200,6 +212,23 @@ public class SpeechUtil {
                     UserError.Log.e(TAG, "English is not supported! total failure");
                     tts = null;
                 }
+
+                if (tts != null) {
+                    tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                        @Override
+                        public void onStart(String utteranceId) {}
+
+                        @Override
+                        public void onDone(String utteranceId) {
+                            releaseAudioFocus();
+                        }
+
+                        @Override
+                        public void onError(String utteranceId) {
+                            releaseAudioFocus();
+                        }
+                    });
+                }
             } else {
                 UserError.Log.e(TAG, "Initialize status code indicates failure, code: " + status);
                 tts = null;
@@ -209,6 +238,7 @@ public class SpeechUtil {
 
     // shutdown existing instance - most useful when changing language or parameters
     public static synchronized void shutdown() {
+        releaseAudioFocus();
         if (tts != null) {
             try {
                 tts.shutdown();
@@ -216,6 +246,37 @@ public class SpeechUtil {
                 UserError.Log.e(TAG, "Got exception shutting down service: " + e);
             }
             tts = null;
+        }
+    }
+
+    private static void requestAudioFocus() {
+        try {
+            final AudioManager am = (AudioManager) xdrip.getAppContext()
+                    .getSystemService(Context.AUDIO_SERVICE);
+            if (am == null) return;
+            audioFocusListener = focusChange ->
+                    UserError.Log.d(TAG, "Audio focus change: " + focusChange);
+            am.requestAudioFocus(audioFocusListener, AudioManager.STREAM_MUSIC,
+                    AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK);
+            UserError.Log.d(TAG, "Audio focus requested");
+        } catch (Exception e) {
+            UserError.Log.e(TAG, "Failed to request audio focus: " + e);
+        }
+    }
+
+    static void releaseAudioFocus() {
+        try {
+            if (audioFocusListener != null) {
+                final AudioManager am = (AudioManager) xdrip.getAppContext()
+                        .getSystemService(Context.AUDIO_SERVICE);
+                if (am != null) {
+                    am.abandonAudioFocus(audioFocusListener);
+                    UserError.Log.d(TAG, "Audio focus released");
+                }
+                audioFocusListener = null;
+            }
+        } catch (Exception e) {
+            UserError.Log.e(TAG, "Failed to release audio focus: " + e);
         }
     }
 

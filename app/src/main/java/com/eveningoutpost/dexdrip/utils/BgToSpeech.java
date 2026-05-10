@@ -17,7 +17,6 @@ import com.eveningoutpost.dexdrip.utils.DexCollectionType;
 import com.eveningoutpost.dexdrip.xdrip;
 
 import java.text.DecimalFormat;
-import java.util.Calendar;
 
 import static com.eveningoutpost.dexdrip.utilitymodels.SpeechUtil.TWICE_DELIMITER;
 
@@ -36,6 +35,10 @@ public class BgToSpeech implements NamedSliderProcessor {
     private static final double MAX_THRESHOLD_MGDL = 100;
 
     private static final String TAG = "BgToSpeech";
+
+    static {
+        UserError.ExtraLogTags.ensureDebugTag(TAG);
+    }
 
     private static int getMinutesSliderValue(int position) {
         return (int) LogSlider.calc(0, 300, 4, MAX_THRESHOLD_MINUTES, position);
@@ -111,38 +114,19 @@ public class BgToSpeech implements NamedSliderProcessor {
     public static boolean isWithinSchedule() {
         try {
             if (Pref.getBooleanDefaultFalse("speak_readings_schedule_enabled")) {
-                long startMillis = getScheduleTimeSafe("speak_readings_schedule_start");
-                long endMillis = getScheduleTimeSafe("speak_readings_schedule_end");
-                UserError.Log.d(TAG, "Schedule enabled: startMillis=" + startMillis + " endMillis=" + endMillis);
-
-                Calendar now = Calendar.getInstance();
-                int nowMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
-
-                int startMinutes = 0; // default: midnight
-                if (startMillis != 0) {
-                    Calendar cs = Calendar.getInstance();
-                    cs.setTimeInMillis(startMillis);
-                    startMinutes = cs.get(Calendar.HOUR_OF_DAY) * 60 + cs.get(Calendar.MINUTE);
-                }
-
-                int endMinutes = 24 * 60; // default: end of day
-                if (endMillis != 0) {
-                    Calendar ce = Calendar.getInstance();
-                    ce.setTimeInMillis(endMillis);
-                    endMinutes = ce.get(Calendar.HOUR_OF_DAY) * 60 + ce.get(Calendar.MINUTE);
-                }
+                final int nowMinutes = minutesSinceMidnight();
+                final int startMinutes = getScheduleMinutes("speak_readings_schedule_start", 0);
+                final int endMinutes = getScheduleMinutes("speak_readings_schedule_end", 24 * 60);
 
                 UserError.Log.d(TAG, "Schedule check: now=" + nowMinutes
-                        + " (" + now.get(Calendar.HOUR_OF_DAY) + ":" + String.format("%02d", now.get(Calendar.MINUTE)) + ")"
                         + " start=" + startMinutes + " end=" + endMinutes);
 
-                // Same start and end means all day (no restriction)
                 if (startMinutes == endMinutes) {
                     UserError.Log.d(TAG, "Schedule: start==end, treating as all day");
                     return true;
                 }
 
-                boolean inRange;
+                final boolean inRange;
                 if (startMinutes < endMinutes) {
                     inRange = nowMinutes >= startMinutes && nowMinutes < endMinutes;
                 } else {
@@ -151,10 +135,7 @@ public class BgToSpeech implements NamedSliderProcessor {
                 }
 
                 UserError.Log.d(TAG, "Schedule result: inRange=" + inRange);
-
-                if (!inRange) {
-                    return false;
-                }
+                if (!inRange) return false;
             }
         } catch (Exception e) {
             UserError.Log.e(TAG, "Error reading schedule preferences, falling back to speaking: " + e);
@@ -163,22 +144,30 @@ public class BgToSpeech implements NamedSliderProcessor {
     }
 
     /**
-     * Safely read a schedule time preference, handling potential ClassCastException
-     * that can occur on some devices if the value was stored as a different type.
+     * Reads a schedule time preference and returns minutes since midnight (0–1439),
+     * or defaultIfUnset if the preference has never been saved.
+     * Handles migration from the legacy epoch-ms storage format used in earlier builds.
      */
-    private static long getScheduleTimeSafe(String key) {
+    private static int getScheduleMinutes(final String key, final int defaultIfUnset) {
+        final long stored;
         try {
-            return Pref.getLong(key, 0);
+            stored = Pref.getLong(key, -1);
         } catch (ClassCastException e) {
             UserError.Log.e(TAG, "ClassCastException reading " + key + ", trying as string: " + e);
             try {
-                String val = Pref.getString(key, "0");
-                return Long.parseLong(val);
+                final long parsed = Long.parseLong(Pref.getString(key, "-1"));
+                return parsed < 0 ? defaultIfUnset : TimePreference.migrateToMinutes(parsed);
             } catch (Exception e2) {
-                UserError.Log.e(TAG, "Failed to read " + key + " as string too: " + e2);
-                return 0;
+                UserError.Log.e(TAG, "Failed to read " + key + " as string: " + e2);
+                return defaultIfUnset;
             }
         }
+        return stored < 0 ? defaultIfUnset : TimePreference.migrateToMinutes(stored);
+    }
+
+    private static int minutesSinceMidnight() {
+        final java.util.Calendar now = java.util.Calendar.getInstance();
+        return now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE);
     }
 
     private static volatile long pendingSpeakAt = 0;
@@ -226,17 +215,10 @@ public class BgToSpeech implements NamedSliderProcessor {
             if (!Pref.getBooleanDefaultFalse("speak_readings_schedule_enabled")) {
                 return -1;
             }
-            final long startMillis = getScheduleTimeSafe("speak_readings_schedule_start");
-            if (startMillis == 0) return -1;
+            final int startMinutes = getScheduleMinutes("speak_readings_schedule_start", -1);
+            if (startMinutes < 0) return -1;
 
-            final Calendar cs = Calendar.getInstance();
-            cs.setTimeInMillis(startMillis);
-            final int startMinutes = cs.get(Calendar.HOUR_OF_DAY) * 60 + cs.get(Calendar.MINUTE);
-
-            final Calendar now = Calendar.getInstance();
-            final int nowMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
-
-            int diff = startMinutes - nowMinutes;
+            int diff = startMinutes - minutesSinceMidnight();
             if (diff <= 0) diff += 24 * 60;
 
             return diff * 60 * 1000L;

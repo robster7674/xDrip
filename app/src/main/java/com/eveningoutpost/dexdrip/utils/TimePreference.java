@@ -13,6 +13,10 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.GregorianCalendar;
 
+// Times are stored as minutes-since-midnight (0–1439), a DST-safe integer.
+// Values > 1439 in storage are legacy epoch-ms from an older build and are
+// migrated transparently by migrateToMinutes().
+
 public class TimePreference extends DialogPreference {
     private Calendar calendar;
     private TimePicker picker = null;
@@ -52,12 +56,15 @@ public class TimePreference extends DialogPreference {
         super.onDialogClosed(positiveResult);
 
         if (positiveResult) {
-            calendar.set(Calendar.HOUR_OF_DAY, picker.getCurrentHour());
-            calendar.set(Calendar.MINUTE, picker.getCurrentMinute());
+            final int hour = picker.getCurrentHour();
+            final int minute = picker.getCurrentMinute();
+            calendar.set(Calendar.HOUR_OF_DAY, hour);
+            calendar.set(Calendar.MINUTE, minute);
 
             setSummary(getSummary());
-            if (callChangeListener(calendar.getTimeInMillis())) {
-                persistLong(calendar.getTimeInMillis());
+            final long minutesSinceMidnight = hour * 60 + minute;
+            if (callChangeListener(minutesSinceMidnight)) {
+                persistLong(minutesSinceMidnight);
                 notifyChanged();
             }
         }
@@ -70,20 +77,19 @@ public class TimePreference extends DialogPreference {
 
     @Override
     protected void onSetInitialValue(boolean restoreValue, Object defaultValue) {
-
+        final int minutes;
         if (restoreValue) {
-            if (defaultValue == null) {
-                calendar.setTimeInMillis(getPersistedLong(System.currentTimeMillis()));
-            } else {
-                calendar.setTimeInMillis(Long.parseLong(getPersistedString((String) defaultValue)));
-            }
+            final long stored = getPersistedLong(-1);
+            minutes = (stored < 0) ? currentMinutes() : migrateToMinutes(stored);
         } else {
             if (defaultValue == null) {
-                calendar.setTimeInMillis(System.currentTimeMillis());
+                minutes = currentMinutes();
             } else {
-                calendar.setTimeInMillis(Long.parseLong((String) defaultValue));
+                minutes = migrateToMinutes(Long.parseLong((String) defaultValue));
             }
         }
+        calendar.set(Calendar.HOUR_OF_DAY, minutes / 60);
+        calendar.set(Calendar.MINUTE, minutes % 60);
         setSummary(getSummary());
     }
 
@@ -93,5 +99,23 @@ public class TimePreference extends DialogPreference {
             return null;
         }
         return JoH.getTimeFormat().format(new Date(calendar.getTimeInMillis()));
+    }
+
+    private static int currentMinutes() {
+        final Calendar c = Calendar.getInstance();
+        return c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE);
+    }
+
+    /**
+     * Converts any stored time value to minutes-since-midnight (0–1439).
+     * Values already in that range pass through unchanged.
+     * Larger values are treated as legacy epoch-ms and the local hour:minute is extracted.
+     */
+    static int migrateToMinutes(final long stored) {
+        if (stored <= 0) return 0;
+        if (stored <= 1439) return (int) stored;
+        final Calendar c = Calendar.getInstance();
+        c.setTimeInMillis(stored);
+        return c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE);
     }
 }

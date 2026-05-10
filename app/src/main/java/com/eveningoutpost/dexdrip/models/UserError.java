@@ -445,5 +445,10 @@ public class UserError extends Model {
             return levelForTag != null && level >= levelForTag;
         }
 
+        public static void ensureDebugTag(final String tag) {
+            if (tag == null) return;
+            extraTags.putIfAbsent(tag.toLowerCase(), android.util.Log.DEBUG);
+        }
+
     }
 }
